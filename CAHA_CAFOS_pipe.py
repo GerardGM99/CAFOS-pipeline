@@ -16,41 +16,43 @@ import calibration as calib
 
 calib.init()
 
-print('*************************')
-print('MASTER BIAS')
-print('*************************')
-calib.apply_master_bias(img_code='caf*', plot=False)
-print('Master BIAS apllied')
+def general_calibrations():
+    print('*************************')
+    print('MASTER BIAS')
+    print('*************************')
+    calib.apply_master_bias(img_code='caf*', plot=False)
+    print('Master BIAS apllied')
+    
+    print('*************************')
+    print('MASTER FLAT')
+    print('*************************')
+    calib.apply_master_flat(plot = False)
+    print('Master FLAT apllied')
+    
+    print('*************************')
+    print('WAVELENGHT CALIBRATIONS')
+    print('*************************')
+    calib.wavelength_calibration(grism='green-200', plot=False)
 
-print('*************************')
-print('MASTER FLAT')
-print('*************************')
-calib.apply_master_flat(plot = False)
-print('Master FLAT apllied')
-
-print('*************************')
-print('WAVELENGHT CALIBRATIONS')
-print('*************************')
-calib.wavelength_calibration(grism='green-200', plot=False)
-
-print('*************************')
-print('SKY SUBSTRACTION')
-print('*************************')
-calib.sky_substraction()
-
-print('*************************')
-print('ALIGNMENT')
-print('*************************')
-x_min, x_max, y_min, y_max = calib.spec_align()
-
-print('*************************')
-print('SPECTRUM EXTRACTION')
-print('*************************')
-calib.spec_extract(x_min, x_max, y_min, y_max)
-
-print('*************************')
-print('FLUX CALIBRATION')
-print('*************************')
-flux_cal = input('Apply flux calibration? (Chose "yes" or "no")')
-if flux_cal in ['Yes', 'yes', 'Y', 'y']:
-    calib.flux_calib()
+def science():
+    print('*************************')
+    print('SKY SUBSTRACTION')
+    print('*************************')
+    calib.sky_substraction()
+    
+    print('*************************')
+    print('ALIGNMENT')
+    print('*************************')
+    x_min, x_max, y_min, y_max = calib.spec_align()
+    
+    print('*************************')
+    print('SPECTRUM EXTRACTION')
+    print('*************************')
+    calib.spec_extract(x_min, x_max, y_min, y_max)
+    
+    print('*************************')
+    print('FLUX CALIBRATION')
+    print('*************************')
+    flux_cal = input('Apply flux calibration? (Chose "yes" or "no")')
+    if flux_cal in ['Yes', 'yes', 'Y', 'y']:
+        calib.flux_calib()
