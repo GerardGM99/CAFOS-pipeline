@@ -47,9 +47,9 @@ GRISM- 9   green-200
 GRISM- 2   green-100
 
 SLIT    INSAPDY
------    ------------
+-----   ------------
 1''     89.0 micron
-1.5''    129.0 micron
+1.5''   129.0 micron
 '''
 
 # Set directories as a global variable
@@ -429,61 +429,7 @@ def apply_master_flat(plot = False):
 '''
 Wavelength calibrations
 '''
-            
-def wavelength_calibration(grism='green-200', plot=False):
-    
-    # Arc images
-    selected_keywords = [ #fits header parameters to check
-        'IMAGETYP', 'NAXIS1', 'NAXIS2', 'OBJECT' , 
-            'INSAPDY', 'INSGRID', 'INSGRNAM', 'INSGRROT', 'EXPTIME' , 'INSFLID', 'DATE-OBS', 'AIRMASS'
-    ]
-    
-    ifc_all = ImageFileCollection(
-        location=directory ,
-        glob_include='fz_*.fits',
-        keywords=selected_keywords
-    )
-    summary_all = ifc_all.summary
-        
-    matches_arc = summary_all['IMAGETYP'] == 'arc'
-    summary_arc = summary_all[matches_arc]
-    
-    if plot is True:
-        for filename, objname in summary_arc['file', 'OBJECT']:
-            data = fits.getdata(directory / filename)
-            mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-            vmin = median - 2 * std
-            vmax = median + 8 * std
-            fig, ax = plt.subplots(figsize=(15, 5))
-            tea_imshow(fig, ax, data, vmin=vmin, vmax=vmax, 
-                       title=f'{filename}, {objname}')
-            plt.savefig(os.path.join(PLOTDIR, f"arc_{filename}_{objname}.png"), dpi=80)            
-            plt.show()
-    
-    arc_file=summary_arc['file'][summary_arc['INSGRNAM'] == grism][0]
-    input_filename = directory / arc_file
-    data = fits.getdata(input_filename)
-    
-    #we use a slice between 120-130 to find the peaks
-    wavecalib = TeaWaveCalibration()
-    ns_range = SliceRegion1D(np.s_[600:700], mode='fits')
-    
-    xpeaks_reference_initial, ixpeaks_reference, spectrum_reference = wavecalib.compute_xpeaks_reference(
-        data=data,
-        sigma_smooth=2,
-        delta_flux=10,
-        ns_range=ns_range,
-        plot_spectrum=True,
-        plot_peaks=True
-    )
-    
-    # reference lines and pixels for Hg+He+Rb lamps, grism g-200
-    comparison_reference_wav = np.array([4046.56, 4358.33, 4678.15, 4799.91, 5085.82, 5460.74,
-                                         6438.47, 7800.268, 7947.603, 8521.162, 10139.8])
-    comparison_reference_pix = np.array([1475,1400,1320,1295,1225,1140,925,635,605,485,125])
-    
-    # revert x-axis
-    comparison_reference_pix = 2000-comparison_reference_pix
+def wavelength_calibration(plot=False):
     
     def find_best_match(observed_peaks, reference_peaks):
         max_matches = 0
@@ -510,141 +456,421 @@ def wavelength_calibration(grism='green-200', plot=False):
         
         return id_matches_obs, id_matches_ref
     
-    # Find the best match
-    observed_peaks = xpeaks_reference_initial.data.tolist()
-    reference_peaks = comparison_reference_pix
-    id_matches_obs, id_matches_ref = find_best_match(observed_peaks, reference_peaks)
-    id_matches_obs, id_matches_ref = np.array(id_matches_obs), np.array(id_matches_ref)
-    
-    print("Number of matches:", len(id_matches_obs))
-    print("Indexes of matches:", id_matches_obs+1)
-    print("Corresponding wavelengths:", comparison_reference_wav[id_matches_ref])
-    
-    
-    # Apply peak wavelength assignment
-    xpeaks_reference = np.array(ixpeaks_reference)[id_matches_obs] * u.pixel
-    wavelengths_reference = comparison_reference_wav[id_matches_ref] * u.Angstrom
-    wavecalib.define_peak_wavelengths(
-        xpeaks=xpeaks_reference,
-        wavelengths=wavelengths_reference
-    )
-    
-    #we fit a 5 degree pol
-    poly_fits_wav, residual_std_wav, poly_fits_pix, residual_std_pix, \
-    crval1_linear, cdelt1_linear, crmax1_linear = wavecalib.fit_xpeaks_wavelengths(
-        xpeaks=xpeaks_reference,
-        degree_wavecalib=5,
-        debug=True,
-        plots=True
-    )
-    
-    crval1 = crval1_linear
-    cdelt1 = cdelt1_linear
-    
-    wavecalib.compute_xpeaks_image(
-        data=data, 
-        xpeaks_reference=xpeaks_reference, 
-        plots=True,
-        title=input_filename
-    )
-    
-    wavecalib.reset_image()
-     
-    ns_range1 = SliceRegion1D(np.s_[300:400], mode='fits')
-
-    wavecalib.compute_xpeaks_image(
-        data=data,
-        xpeaks_reference=xpeaks_reference,
-        ns_range=ns_range1,
-        plots=True,
-        title=input_filename,
-        disable_tqdm=False
-    )
-    
-    ns_range2 = SliceRegion1D(np.s_[400:800], mode='fits')
-
-    wavecalib.compute_xpeaks_image(
-        data=data,
-        xpeaks_reference=xpeaks_reference,
-        ns_range=ns_range2,
-        direction='down',
-        plots=True,
-        title=input_filename,
-        disable_tqdm=False
-    )
-    
-    ns_range3 = SliceRegion1D(np.s_[800:1000], mode='fits')
-
-    wavecalib.compute_xpeaks_image(
-        data=data,
-        xpeaks_reference=xpeaks_reference,
-        ns_range=ns_range3,
-        plots=True,
-        title=input_filename,
-        disable_tqdm=False
-    )
-    
-    #We fit C distorsion:
-    wavecalib.fit_cdistortion(
-        degree_cdistortion=2, 
-        plots=True,
-        title=input_filename
-    )
-    
-    wavecalib.plot_cdistortion(data, title=input_filename)
-    
-    # define additional information for the image header
-    history_list = [
-        'Wavelength calibration',
-        f'Input file: {input_filename}'
+    # Arc images
+    selected_keywords = [ #fits header parameters to check
+        'IMAGETYP', 'NAXIS1', 'NAXIS2', 'OBJECT' , 
+            'INSAPDY', 'INSGRID', 'INSGRNAM', 'INSGRROT', 'EXPTIME' , 'INSFLID', 'DATE-OBS', 'AIRMASS'
     ]
     
-    # name of the auxiliary FITS file
-    wavecal_filename =  f'{directory}/wavecal_{arc_file}'
-    
-    # compute wavelength calibration and save result in auxiliary FITS file
-    wavecalib.fit_wavelengths(
-        output_filename= wavecal_filename,
-        history_list=history_list,
-        plots=True,
-        title=input_filename,
-        disable_tqdm=False,
+    ifc_all = ImageFileCollection(
+        location=directory ,
+        glob_include='fz_*.fits',
+        keywords=selected_keywords
     )
+    summary_all = ifc_all.summary
+        
+    matches_arc = summary_all['IMAGETYP'] == 'arc'
+    summary_arc = summary_all[matches_arc]
     
-    data_wavecalib = wavecalib.apply(
-        data=data, 
-        crval1=crval1, 
-        cdelt1=cdelt1, 
-        disable_tqdm=False
-    )
+    grisms = set(summary_arc['INSGRNAM'])
+    slits = set(summary_arc['INSAPDY'])
     
-    wavecalib.plot_data_comparison(
-        data_before=data,
-        data_after=data_wavecalib,
-        crval1=crval1,
-        cdelt1=cdelt1,
-        title=f'Wavelength calibration of {input_filename}',
-        semi_window=25
-    )
+    if plot is True:
+        for filename, objname in summary_arc['file', 'OBJECT']:
+            data = fits.getdata(directory / filename)
+            mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+            vmin = median - 2 * std
+            vmax = median + 8 * std
+            fig, ax = plt.subplots(figsize=(15, 5))
+            tea_imshow(fig, ax, data, vmin=vmin, vmax=vmax, 
+                       title=f'{filename}, {objname}')
+            plt.savefig(os.path.join(PLOTDIR, f"arc_{filename}_{objname}.png"), dpi=80)            
+            plt.show()
     
-    matches_run = (summary_all['IMAGETYP'] == 'science')
-    summary_science = summary_all[matches_run]
-    matches_run = (summary_science['EXPTIME']>20)
-    summary_science = summary_science[matches_run]
+    for grism in grisms:
+        for slit in slits:
+            mask = (summary_arc['INSGRNAM'] == grism) & (summary_arc['INSAPDY'] == slit)
+            if not any(mask):
+                continue
+            print(f'Grism/Slit combination: {grism}, {slit} micron')
+            arc_file=summary_arc['file'][mask][0]
+            input_filename = directory / arc_file
+            data = fits.getdata(input_filename)
+            
+            #we use a slice between 120-130 to find the peaks
+            wavecalib = TeaWaveCalibration()
+            ns_range = SliceRegion1D(np.s_[600:700], mode='fits')
+            
+            xpeaks_reference_initial, ixpeaks_reference, spectrum_reference = wavecalib.compute_xpeaks_reference(
+                data=data,
+                sigma_smooth=2,
+                delta_flux=10,
+                ns_range=ns_range,
+                plot_spectrum=True,
+                plot_peaks=True
+            )
+            
+            # reference lines and pixels for Hg+He+Rb lamps, grism g-200
+            comparison_reference_wav = np.array([4046.56, 4358.33, 4678.15, 4799.91, 5085.82, 5460.74,
+                                                 6438.47, 7800.268, 7947.603, 8521.162, 10139.8])
+            comparison_reference_pix = np.array([1475,1400,1320,1295,1225,1140,925,635,605,485,125])
+            
+            # revert x-axis
+            comparison_reference_pix = 2000-comparison_reference_pix
+            
+            
+            # Find the best match
+            observed_peaks = xpeaks_reference_initial.data.tolist()
+            reference_peaks = comparison_reference_pix
+            id_matches_obs, id_matches_ref = find_best_match(observed_peaks, reference_peaks)
+            id_matches_obs, id_matches_ref = np.array(id_matches_obs), np.array(id_matches_ref)
+            
+            print("Number of matches:", len(id_matches_obs))
+            print("Indexes of matches:", id_matches_obs+1)
+            print("Corresponding wavelengths:", comparison_reference_wav[id_matches_ref])
+            
+            
+            # Apply peak wavelength assignment
+            xpeaks_reference = np.array(ixpeaks_reference)[id_matches_obs] * u.pixel
+            wavelengths_reference = comparison_reference_wav[id_matches_ref] * u.Angstrom
+            wavecalib.define_peak_wavelengths(
+                xpeaks=xpeaks_reference,
+                wavelengths=wavelengths_reference
+            )
+            
+            #we fit a 5 degree pol
+            poly_fits_wav, residual_std_wav, poly_fits_pix, residual_std_pix, \
+            crval1_linear, cdelt1_linear, crmax1_linear = wavecalib.fit_xpeaks_wavelengths(
+                xpeaks=xpeaks_reference,
+                degree_wavecalib=5,
+                debug=True,
+                plots=True
+            )
+            
+            crval1 = crval1_linear
+            cdelt1 = cdelt1_linear
+            
+            wavecalib.compute_xpeaks_image(
+                data=data, 
+                xpeaks_reference=xpeaks_reference, 
+                plots=True,
+                title=input_filename
+            )
+            
+            wavecalib.reset_image()
+             
+            ns_range1 = SliceRegion1D(np.s_[300:400], mode='fits')
+        
+            wavecalib.compute_xpeaks_image(
+                data=data,
+                xpeaks_reference=xpeaks_reference,
+                ns_range=ns_range1,
+                plots=True,
+                title=input_filename,
+                disable_tqdm=False
+            )
+            
+            ns_range2 = SliceRegion1D(np.s_[400:800], mode='fits')
+        
+            wavecalib.compute_xpeaks_image(
+                data=data,
+                xpeaks_reference=xpeaks_reference,
+                ns_range=ns_range2,
+                direction='down',
+                plots=True,
+                title=input_filename,
+                disable_tqdm=False
+            )
+            
+            ns_range3 = SliceRegion1D(np.s_[800:1000], mode='fits')
+        
+            wavecalib.compute_xpeaks_image(
+                data=data,
+                xpeaks_reference=xpeaks_reference,
+                ns_range=ns_range3,
+                plots=True,
+                title=input_filename,
+                disable_tqdm=False
+            )
+            
+            #We fit C distorsion:
+            wavecalib.fit_cdistortion(
+                degree_cdistortion=2, 
+                plots=True,
+                title=input_filename
+            )
+            
+            wavecalib.plot_cdistortion(data, title=input_filename)
+            
+            # define additional information for the image header
+            history_list = [
+                'Wavelength calibration',
+                f'Input file: {input_filename}'
+            ]
+            
+            # name of the auxiliary FITS file
+            wavecal_filename =  f'{directory}/wavecal_{grism}_{slit}_{arc_file}'
+            
+            # compute wavelength calibration and save result in auxiliary FITS file
+            wavecalib.fit_wavelengths(
+                output_filename= wavecal_filename,
+                history_list=history_list,
+                plots=True,
+                title=input_filename,
+                disable_tqdm=False,
+            )
+            
+            data_wavecalib = wavecalib.apply(
+                data=data, 
+                crval1=crval1, 
+                cdelt1=cdelt1, 
+                disable_tqdm=False
+            )
+            
+            wavecalib.plot_data_comparison(
+                data_before=data,
+                data_after=data_wavecalib,
+                crval1=crval1,
+                cdelt1=cdelt1,
+                title=f'Wavelength calibration of {input_filename}',
+                semi_window=25
+            )
+            
+            matches_run = (summary_all['IMAGETYP'] == 'science')
+            summary_science = summary_all[matches_run]
+            matches_run = (summary_science['EXPTIME']>20)
+            summary_science = summary_science[matches_run]
+            matches_run = (summary_science['INSGRNAM'] == grism) & (summary_science['INSAPDY'] == slit)
+            
+            
+            print(f'Total number of science files ...: {len(summary_science)}')
+            
+            for i, (filename) in enumerate(tqdm(summary_science['file'])):
+                input_filename = directory / Path(filename).name
+                output_filename = directory / f'w{Path(filename).name}'
+                apply_wavecal_ccddata(
+                    infile=input_filename,
+                    wcalibfile=wavecal_filename,
+                    outfile=output_filename,
+                    crval1=crval1,
+                    cdelt1=cdelt1
+                )
+                
+# def wavelength_calibration(grism='green-200', plot=False):
+    
+#     # Arc images
+#     selected_keywords = [ #fits header parameters to check
+#         'IMAGETYP', 'NAXIS1', 'NAXIS2', 'OBJECT' , 
+#             'INSAPDY', 'INSGRID', 'INSGRNAM', 'INSGRROT', 'EXPTIME' , 'INSFLID', 'DATE-OBS', 'AIRMASS'
+#     ]
+    
+#     ifc_all = ImageFileCollection(
+#         location=directory ,
+#         glob_include='fz_*.fits',
+#         keywords=selected_keywords
+#     )
+#     summary_all = ifc_all.summary
+        
+#     matches_arc = summary_all['IMAGETYP'] == 'arc'
+#     summary_arc = summary_all[matches_arc]
+    
+#     if plot is True:
+#         for filename, objname in summary_arc['file', 'OBJECT']:
+#             data = fits.getdata(directory / filename)
+#             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+#             vmin = median - 2 * std
+#             vmax = median + 8 * std
+#             fig, ax = plt.subplots(figsize=(15, 5))
+#             tea_imshow(fig, ax, data, vmin=vmin, vmax=vmax, 
+#                        title=f'{filename}, {objname}')
+#             plt.savefig(os.path.join(PLOTDIR, f"arc_{filename}_{objname}.png"), dpi=80)            
+#             plt.show()
+    
+#     arc_file=summary_arc['file'][summary_arc['INSGRNAM'] == grism][0]
+#     input_filename = directory / arc_file
+#     data = fits.getdata(input_filename)
+    
+#     #we use a slice between 120-130 to find the peaks
+#     wavecalib = TeaWaveCalibration()
+#     ns_range = SliceRegion1D(np.s_[600:700], mode='fits')
+    
+#     xpeaks_reference_initial, ixpeaks_reference, spectrum_reference = wavecalib.compute_xpeaks_reference(
+#         data=data,
+#         sigma_smooth=2,
+#         delta_flux=10,
+#         ns_range=ns_range,
+#         plot_spectrum=True,
+#         plot_peaks=True
+#     )
+    
+#     # reference lines and pixels for Hg+He+Rb lamps, grism g-200
+#     comparison_reference_wav = np.array([4046.56, 4358.33, 4678.15, 4799.91, 5085.82, 5460.74,
+#                                          6438.47, 7800.268, 7947.603, 8521.162, 10139.8])
+#     comparison_reference_pix = np.array([1475,1400,1320,1295,1225,1140,925,635,605,485,125])
+    
+#     # revert x-axis
+#     comparison_reference_pix = 2000-comparison_reference_pix
+    
+#     def find_best_match(observed_peaks, reference_peaks):
+#         max_matches = 0
+#         id_matches = []
+        
+#         # Iterate over a range of potential differences
+#         for difference in np.arange(np.min(reference_peaks)-np.mean(observed_peaks),
+#                                     np.max(reference_peaks)-np.mean(observed_peaks)):  
+#             id_matches_obs, id_matches_ref = find_peak_matches(observed_peaks, reference_peaks, difference)
+#             num_matches = len(id_matches_obs)
+#             if num_matches > max_matches:
+#                 # Found a new best match
+#                 max_matches = num_matches
+#                 id_matches = (id_matches_obs, id_matches_ref)
+        
+#         return id_matches
+    
+#     def find_peak_matches(observed_peaks, reference_peaks, difference, tol=10):
+#         reference_peaks_shifted = [peak - difference for peak in reference_peaks]
+        
+#         # Find the matches between observed and shifted reference peaks within (tol) pix
+#         id_matches_obs = [np.argmin(np.abs(observed_peaks-reference_peaks_shifted[p])) for p in range(len(reference_peaks_shifted)) if np.min(np.abs(observed_peaks-reference_peaks_shifted[p]))<tol]
+#         id_matches_ref = [p for p in range(len(reference_peaks_shifted)) if np.min(np.abs(observed_peaks-reference_peaks_shifted[p]))<tol]
+        
+#         return id_matches_obs, id_matches_ref
+    
+#     # Find the best match
+#     observed_peaks = xpeaks_reference_initial.data.tolist()
+#     reference_peaks = comparison_reference_pix
+#     id_matches_obs, id_matches_ref = find_best_match(observed_peaks, reference_peaks)
+#     id_matches_obs, id_matches_ref = np.array(id_matches_obs), np.array(id_matches_ref)
+    
+#     print("Number of matches:", len(id_matches_obs))
+#     print("Indexes of matches:", id_matches_obs+1)
+#     print("Corresponding wavelengths:", comparison_reference_wav[id_matches_ref])
     
     
-    print(f'Total number of science files ...: {len(summary_science)}')
+#     # Apply peak wavelength assignment
+#     xpeaks_reference = np.array(ixpeaks_reference)[id_matches_obs] * u.pixel
+#     wavelengths_reference = comparison_reference_wav[id_matches_ref] * u.Angstrom
+#     wavecalib.define_peak_wavelengths(
+#         xpeaks=xpeaks_reference,
+#         wavelengths=wavelengths_reference
+#     )
     
-    for i, (filename) in enumerate(tqdm(summary_science['file'])):
-        input_filename = directory / Path(filename).name
-        output_filename = directory / f'w{Path(filename).name}'
-        apply_wavecal_ccddata(
-            infile=input_filename,
-            wcalibfile=wavecal_filename,
-            outfile=output_filename,
-            crval1=crval1,
-            cdelt1=cdelt1
-        )
+#     #we fit a 5 degree pol
+#     poly_fits_wav, residual_std_wav, poly_fits_pix, residual_std_pix, \
+#     crval1_linear, cdelt1_linear, crmax1_linear = wavecalib.fit_xpeaks_wavelengths(
+#         xpeaks=xpeaks_reference,
+#         degree_wavecalib=5,
+#         debug=True,
+#         plots=True
+#     )
+    
+#     crval1 = crval1_linear
+#     cdelt1 = cdelt1_linear
+    
+#     wavecalib.compute_xpeaks_image(
+#         data=data, 
+#         xpeaks_reference=xpeaks_reference, 
+#         plots=True,
+#         title=input_filename
+#     )
+    
+#     wavecalib.reset_image()
+     
+#     ns_range1 = SliceRegion1D(np.s_[300:400], mode='fits')
+
+#     wavecalib.compute_xpeaks_image(
+#         data=data,
+#         xpeaks_reference=xpeaks_reference,
+#         ns_range=ns_range1,
+#         plots=True,
+#         title=input_filename,
+#         disable_tqdm=False
+#     )
+    
+#     ns_range2 = SliceRegion1D(np.s_[400:800], mode='fits')
+
+#     wavecalib.compute_xpeaks_image(
+#         data=data,
+#         xpeaks_reference=xpeaks_reference,
+#         ns_range=ns_range2,
+#         direction='down',
+#         plots=True,
+#         title=input_filename,
+#         disable_tqdm=False
+#     )
+    
+#     ns_range3 = SliceRegion1D(np.s_[800:1000], mode='fits')
+
+#     wavecalib.compute_xpeaks_image(
+#         data=data,
+#         xpeaks_reference=xpeaks_reference,
+#         ns_range=ns_range3,
+#         plots=True,
+#         title=input_filename,
+#         disable_tqdm=False
+#     )
+    
+#     #We fit C distorsion:
+#     wavecalib.fit_cdistortion(
+#         degree_cdistortion=2, 
+#         plots=True,
+#         title=input_filename
+#     )
+    
+#     wavecalib.plot_cdistortion(data, title=input_filename)
+    
+#     # define additional information for the image header
+#     history_list = [
+#         'Wavelength calibration',
+#         f'Input file: {input_filename}'
+#     ]
+    
+#     # name of the auxiliary FITS file
+#     wavecal_filename =  f'{directory}/wavecal_{arc_file}'
+    
+#     # compute wavelength calibration and save result in auxiliary FITS file
+#     wavecalib.fit_wavelengths(
+#         output_filename= wavecal_filename,
+#         history_list=history_list,
+#         plots=True,
+#         title=input_filename,
+#         disable_tqdm=False,
+#     )
+    
+#     data_wavecalib = wavecalib.apply(
+#         data=data, 
+#         crval1=crval1, 
+#         cdelt1=cdelt1, 
+#         disable_tqdm=False
+#     )
+    
+#     wavecalib.plot_data_comparison(
+#         data_before=data,
+#         data_after=data_wavecalib,
+#         crval1=crval1,
+#         cdelt1=cdelt1,
+#         title=f'Wavelength calibration of {input_filename}',
+#         semi_window=25
+#     )
+    
+#     matches_run = (summary_all['IMAGETYP'] == 'science')
+#     summary_science = summary_all[matches_run]
+#     matches_run = (summary_science['EXPTIME']>20)
+#     summary_science = summary_science[matches_run]
+    
+    
+#     print(f'Total number of science files ...: {len(summary_science)}')
+    
+#     for i, (filename) in enumerate(tqdm(summary_science['file'])):
+#         input_filename = directory / Path(filename).name
+#         output_filename = directory / f'w{Path(filename).name}'
+#         apply_wavecal_ccddata(
+#             infile=input_filename,
+#             wcalibfile=wavecal_filename,
+#             outfile=output_filename,
+#             crval1=crval1,
+#             cdelt1=cdelt1
+#         )
 
 '''
 Sky substraction

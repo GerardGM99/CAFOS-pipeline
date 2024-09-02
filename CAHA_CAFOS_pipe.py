@@ -32,7 +32,7 @@ def general_calibrations():
     print('*************************')
     print('WAVELENGHT CALIBRATIONS')
     print('*************************')
-    calib.wavelength_calibration(grism='green-200', plot=False)
+    calib.wavelength_calibration(plot=False)
 
 def science():
     print('*************************')
