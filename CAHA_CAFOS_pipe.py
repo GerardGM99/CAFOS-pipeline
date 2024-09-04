@@ -36,7 +36,7 @@ def general_calibrations():
 
 def science():
     print('*************************')
-    print('SKY SUBSTRACTION')
+    print('SKY SUBTRACTION')
     print('*************************')
     calib.sky_substraction()
     
