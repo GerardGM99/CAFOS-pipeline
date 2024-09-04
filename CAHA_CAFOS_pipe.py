@@ -21,13 +21,13 @@ def general_calibrations():
     print('MASTER BIAS')
     print('*************************')
     calib.apply_master_bias(img_code='caf*', plot=False)
-    print('Master BIAS apllied')
+    print('Master BIAS applied')
     
     print('*************************')
     print('MASTER FLAT')
     print('*************************')
     calib.apply_master_flat(plot = False)
-    print('Master FLAT apllied')
+    print('Master FLAT applied')
     
     print('*************************')
     print('WAVELENGHT CALIBRATIONS')
