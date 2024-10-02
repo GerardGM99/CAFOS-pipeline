@@ -62,6 +62,15 @@ def init():
     DATADIR = input('Input directory where your data are: ')
     directory = Path(DATADIR)
     PLOTDIR = os.path.join(DATADIR, "plots")
+    print('---')
+    print('To do the BIAS, FLATS and WAVELENGTH calibration (fully automatic), run "calibrations(img_code, plot)".')
+    print(' >img_code: refers to the start of your files names. Set to "caf*".')
+    print(' >plot: if "True" plots in different calibration steps are saved in a new folder "plots" created in your working directory.')
+    print('---')
+    print('To do the SKY SUBSTRACTION, ALIGNMENT and SPECTRUM EXTRACTION, run "science()". It is not fully automatic.')
+    print('---')
+    print('To do the FLUX CALIBRATION, run "flux_calib()". It is not fully automatic.')
+    print('---')
 
 def read_images(img_code='*', plot=False):
     ##DATADIR='test'
@@ -1539,3 +1548,40 @@ def flux_calib():
     abs_flux_std = os.path.join('Standard stars', abs_standard_file)
     
     apply_flux_calibration(raw_science, raw_std, abs_flux_std, std_flux_mags=False, wmin=3800, wmax=10000)
+
+
+def calibrations(img_code='caf*', plot=False):
+    print('*************************')
+    print('MASTER BIAS')
+    print('*************************')
+    apply_master_bias(img_code=img_code, plot=plot)
+    print('Master BIAS applied')
+    
+    print('*************************')
+    print('MASTER FLAT')
+    print('*************************')
+    apply_master_flat(plot = plot)
+    print('Master FLAT applied')
+    
+    print('*************************')
+    print('WAVELENGHT CALIBRATIONS')
+    print('*************************')
+    wavelength_calibration(plot=plot)
+    
+def science():
+    print('*************************')
+    print('SKY SUBSTRACTION')
+    print('*************************')
+    sky_substraction()
+    
+    print('*************************')
+    print('ALIGNMENT')
+    print('*************************')
+    x_min, x_max, y_min, y_max = spec_align()
+    
+    print('*************************')
+    print('SPECTRUM EXTRACTION')
+    print('*************************')
+    spec_extract(x_min, x_max, y_min, y_max)
+    
+init()
